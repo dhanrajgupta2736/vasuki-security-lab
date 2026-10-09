@@ -1,9 +1,9 @@
 """
 Sample Vulnerable Web Application for VASUKI Security Validation
-Contains intentional CVE scenarios for automated testing and verification:
-  - CVE-1: SQL Injection in authentication
-  - CVE-2: Path Traversal in document retrieval
-  - CVE-3: Broken Access Control (IDOR)
+Contains intentional CWE scenarios for automated testing and verification:
+  - CWE-89: SQL Injection in authentication
+  - CWE-22: Path Traversal in document retrieval
+  - CWE-639: Broken Access Control (IDOR)
 """
 import os
 import sqlite3
