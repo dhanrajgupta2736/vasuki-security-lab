@@ -36,9 +36,10 @@ def login():
     password = data.get("password", "")
 
     # VULNERABILITY 1: SQL Injection via string formatting
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+    # FIX: Use parameterized queries to prevent SQL injection
+    query = "SELECT * FROM users WHERE username = ? AND password = ?"
     cursor = db.cursor()
-    cursor.execute(query)
+    cursor.execute(query, (username, password))
     user = cursor.fetchone()
 
     if user:
@@ -53,9 +54,22 @@ def login():
 def get_document(filename=None):
     # VULNERABILITY 2: Path Traversal
     target = filename or request.args.get("file", "")
+    if not target:
+        return jsonify({"error": "File not specified"}), 400
+
     file_path = os.path.join(UPLOAD_DIR, target)
-    if target and os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
+
+    # FIX: Validate that the resolved path is within the UPLOAD_DIR
+    # Use realpath to resolve any symbolic links or '..' components
+    abs_upload_dir = os.path.realpath(UPLOAD_DIR)
+    abs_file_path = os.path.realpath(file_path)
+
+    # Check if the common path of the requested file and the upload directory is the upload directory itself
+    if not os.path.commonpath([abs_upload_dir, abs_file_path]) == abs_upload_dir:
+        return jsonify({"error": "Access denied: Path traversal attempt detected"}), 403
+
+    if os.path.exists(abs_file_path) and os.path.isfile(abs_file_path):
+        with open(abs_file_path, "r", encoding="utf-8") as f:
             return jsonify({"content": f.read()}), 200
     return jsonify({"error": "File not found"}), 404
 
@@ -63,6 +77,13 @@ def get_document(filename=None):
 @app.route("/api/profile/<int:user_id>", methods=["GET"])
 def get_profile(user_id):
     # VULNERABILITY 3: Broken Access Control (IDOR)
+    # FIX: Add session ownership check to ensure a user can only view their own profile
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    if session["user_id"] != user_id:
+        return jsonify({"error": "Access denied"}), 403
+
     cursor = db.cursor()
     cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
