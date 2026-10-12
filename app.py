@@ -36,9 +36,9 @@ def login():
     password = data.get("password", "")
 
     # VULNERABILITY 1: SQL Injection via string formatting
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+    query = 'SELECT * FROM users WHERE username = ? AND password = ?'
     cursor = db.cursor()
-    cursor.execute(query)
+    cursor.execute(query, (username, password,))
     user = cursor.fetchone()
 
     if user:
@@ -54,6 +54,18 @@ def get_document(filename=None):
     # VULNERABILITY 2: Path Traversal
     target = filename or request.args.get("file", "")
     file_path = os.path.join(UPLOAD_DIR, target)
+
+    # Fix: Check if the resolved path is within the UPLOAD_DIR
+    # Use realpath to resolve any '..' or symlinks
+    real_upload_dir = os.path.realpath(UPLOAD_DIR)
+    real_file_path = os.path.realpath(file_path)
+
+    # Use os.path.commonpath to ensure the resolved file path is strictly within the upload directory.
+    # If the common path between the upload directory and the requested file's real path
+    # is not the upload directory itself, then it's a traversal attempt.
+    if os.path.commonpath([real_upload_dir, real_file_path]) != real_upload_dir:
+        return jsonify({"error": "Access denied"}), 403
+
     if target and os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return jsonify({"content": f.read()}), 200
@@ -63,6 +75,13 @@ def get_document(filename=None):
 @app.route("/api/profile/<int:user_id>", methods=["GET"])
 def get_profile(user_id):
     # VULNERABILITY 3: Broken Access Control (IDOR)
+    if "user_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Ensure the requested user_id matches the logged-in user's ID
+    if user_id != session["user_id"]:
+        return jsonify({"error": "Forbidden"}), 403
+
     cursor = db.cursor()
     cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
